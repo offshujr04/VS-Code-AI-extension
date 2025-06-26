@@ -12,7 +12,7 @@
   "activationEvents": [
     "onCommand:aiExtension.openSidebar"
   ],
-  "main": "./extension.js",
+  "main": "./out/extension.js",
   "contributes": {
     "commands": [
       {
