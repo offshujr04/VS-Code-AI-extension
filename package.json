@@ -10,18 +10,38 @@
     "Other"
   ],
   "activationEvents": [
+    "onView:aiSidebarView",
     "onCommand:aiExtension.openSidebar"
   ],
   "main": "./out/extension.js",
   "contributes": {
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "aiSidebar",
+          "title": "AI Sidebar",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "views": {
+      "aiSidebar": [
+        {
+          "id": "aiSidebarView",
+          "name": "Gemini Chat",
+          "type": "webview"
+        }
+      ]
+    },
     "commands": [
       {
         "command": "aiExtension.openSidebar",
         "title": "Open AI Side"
       }
     ]
-},
+  },
   "scripts": {
+    "build": "tsc",
     "lint": "eslint .",
     "pretest": "npm run lint",
     "test": "vscode-test"

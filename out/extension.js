@@ -36,37 +36,52 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
-const https = __importStar(require("https"));
-function activate(context) {
-    console.log('AI Extension Activated!');
-    context.subscriptions.push(vscode.commands.registerCommand('aiExtension.openSidebar', async () => {
-        // Prompt for Gemini API key (or retrieve from SecretStorage in production)
-        const apiKey = await vscode.window.showInputBox({
-            prompt: 'Enter your Gemini API Key',
-            ignoreFocusOut: true,
-            password: true
-        });
-        if (!apiKey) {
-            vscode.window.showErrorMessage('Gemini API key is required.');
-            return;
-        }
-        const panel = vscode.window.createWebviewPanel('aiPanel', 'Gemini Chat', vscode.ViewColumn.One, { enableScripts: true });
-        panel.webview.html = getWebviewContent();
-        // To listen msg from webview
-        panel.webview.onDidReceiveMessage(async (message) => {
+// AIzaSyDJyAUgbBfPVzGnKgrNB0Llqm7IFn4q-x8
+class GeminiSidebarProvider {
+    constructor(context) {
+        this.context = context;
+        console.log('GeminiSidebarProvider initialized');
+    }
+    async resolveWebviewView(webviewView) {
+        console.log('Resolving Gemini Webview View');
+        webviewView.webview.options = { enableScripts: true };
+        webviewView.webview.html = getWebviewContent();
+        webviewView.webview.onDidReceiveMessage(async (message) => {
             if (message.type === 'userMessage') {
-                const userText = message.text;
+                if (!this.apiKey) {
+                    // Prompt for API key if not set
+                    this.apiKey = await vscode.window.showInputBox({
+                        prompt: 'Enter your Gemini API Key',
+                        ignoreFocusOut: true,
+                        password: true
+                    });
+                    if (!this.apiKey) {
+                        webviewView.webview.postMessage({ type: 'llmResponse', text: 'Error: Gemini API key is required.' });
+                        vscode.window.showErrorMessage('Gemini API key is required.');
+                        return;
+                    }
+                }
                 try {
-                    const reply = await fetchGeminiResponse(userText, apiKey);
-                    panel.webview.postMessage({ type: 'llmResponse', text: reply });
+                    const reply = await fetchGeminiResponse(message.text, this.apiKey);
+                    webviewView.webview.postMessage({ type: 'llmResponse', text: reply });
                 }
                 catch (err) {
-                    // Show error in chat and as a VS Code error message
-                    panel.webview.postMessage({ type: 'llmResponse', text: 'Error: ' + (err?.message || err) });
+                    webviewView.webview.postMessage({ type: 'llmResponse', text: 'Error: ' + (err?.message || err) });
                     vscode.window.showErrorMessage('Gemini API Error: ' + (err?.message || err));
                 }
             }
         });
+    }
+}
+GeminiSidebarProvider.viewType = 'aiSidebarView';
+function activate(context) {
+    console.log('AI Extension Activated!');
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(GeminiSidebarProvider.viewType, new GeminiSidebarProvider(context)));
+    // Register the command to reveal the sidebar view
+    context.subscriptions.push(vscode.commands.registerCommand('aiExtension.openSidebar', () => {
+        vscode.commands.executeCommand('workbench.view.extension.aiSidebar');
+        // Optionally, also reveal the view itself:
+        // vscode.commands.executeCommand('vscode.open', { viewId: GeminiSidebarProvider.viewType });
     }));
 }
 function getWebviewContent() {
@@ -132,38 +147,21 @@ function getWebviewContent() {
     </html>
   `;
 }
-// Gemini API call using Node.js https module
-function fetchGeminiResponse(prompt, apiKey) {
-    const data = JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-    });
-    const options = {
-        hostname: 'generativelanguage.googleapis.com',
-        path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+// Gemini API call using global fetch API
+async function fetchGeminiResponse(prompt, apiKey) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(data)
-        }
-    };
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, res => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                try {
-                    const json = JSON.parse(body);
-                    const reply = json.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
-                    resolve(reply);
-                }
-                catch (e) {
-                    reject(new Error('Invalid response from Gemini API.'));
-                }
-            });
-        });
-        req.on('error', reject);
-        req.write(data);
-        req.end();
+        },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+        })
     });
+    if (!response.ok) {
+        throw new Error(`Gemini API Error: ${response.status} ${response.statusText}`);
+    }
+    const json = await response.json();
+    return json.candidates?.[0]?.content?.parts?.[0]?.text || 'No response.';
 }
 function deactivate() { }

@@ -1,82 +1,48 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-    function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-    return new (P || (P = Promise))(function (resolve, reject) {
-        function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-        function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-        function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-        step((generator = generator.apply(thisArg, _arguments || [])).next());
-    });
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
-const vscode = __importStar(require("vscode"));
-const https = __importStar(require("https"));
-function activate(context) {
-    console.log('AI Extension Activated!');
-    context.subscriptions.push(vscode.commands.registerCommand('aiExtension.openSidebar', () => __awaiter(this, void 0, void 0, function* () {
-        // Prompt for Gemini API key (or retrieve from SecretStorage in production)
-        const apiKey = yield vscode.window.showInputBox({
-            prompt: 'Enter your Gemini API Key',
-            ignoreFocusOut: true,
-            password: true
-        });
-        if (!apiKey) {
-            vscode.window.showErrorMessage('Gemini API key is required.');
-            return;
-        }
-        const panel = vscode.window.createWebviewPanel('aiPanel', 'Gemini Chat', vscode.ViewColumn.One, { enableScripts: true });
-        panel.webview.html = getWebviewContent();
-        // To listen msg from webview
-        panel.webview.onDidReceiveMessage((message) => __awaiter(this, void 0, void 0, function* () {
+const vscode = require("vscode");
+class GeminiSidebarProvider {
+    constructor(context) {
+        this.context = context;
+        this.apiKey = undefined;
+    }
+    async resolveWebviewView(webviewView) {
+        webviewView.webview.options = { enableScripts: true };
+        webviewView.webview.html = getWebviewContent();
+        webviewView.webview.onDidReceiveMessage(async (message) => {
             if (message.type === 'userMessage') {
-                const userText = message.text;
+                if (!this.apiKey) {
+                    this.apiKey = await vscode.window.showInputBox({
+                        prompt: 'Enter your Gemini API Key',
+                        ignoreFocusOut: true,
+                        password: true
+                    });
+                    if (!this.apiKey) {
+                        webviewView.webview.postMessage({ type: 'llmResponse', text: 'Error: Gemini API key is required.' });
+                        vscode.window.showErrorMessage('Gemini API key is required.');
+                        return;
+                    }
+                }
                 try {
-                    const reply = yield fetchGeminiResponse(userText, apiKey);
-                    panel.webview.postMessage({ type: 'llmResponse', text: reply });
+                    const reply = await fetchGeminiResponse(message.text, this.apiKey);
+                    webviewView.webview.postMessage({ type: 'llmResponse', text: reply });
                 }
                 catch (err) {
-                    // Show error in chat and as a VS Code error message
-                    panel.webview.postMessage({ type: 'llmResponse', text: 'Error: ' + ((err === null || err === void 0 ? void 0 : err.message) || err) });
-                    vscode.window.showErrorMessage('Gemini API Error: ' + ((err === null || err === void 0 ? void 0 : err.message) || err));
+                    webviewView.webview.postMessage({ type: 'llmResponse', text: 'Error: ' + (err && err.message ? err.message : err) });
+                    vscode.window.showErrorMessage('Gemini API Error: ' + (err && err.message ? err.message : err));
                 }
             }
-        }));
-    })));
+        });
+    }
+}
+function activate(context) {
+    console.log('AI Extension Activated!');
+    const provider = new GeminiSidebarProvider(context);
+    context.subscriptions.push(
+        vscode.window.registerWebviewViewProvider('aiSidebarView', provider)
+    );
 }
 function getWebviewContent() {
     return `
@@ -141,39 +107,20 @@ function getWebviewContent() {
     </html>
   `;
 }
-// Gemini API call using Node.js https module
-function fetchGeminiResponse(prompt, apiKey) {
-    const data = JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }]
-    });
-    const options = {
-        hostname: 'generativelanguage.googleapis.com',
-        path: `/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+async function fetchGeminiResponse(prompt, apiKey) {
+    const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
-            'Content-Length': Buffer.byteLength(data)
-        }
-    };
-    return new Promise((resolve, reject) => {
-        const req = https.request(options, res => {
-            let body = '';
-            res.on('data', chunk => body += chunk);
-            res.on('end', () => {
-                var _a, _b, _c, _d, _e;
-                try {
-                    const json = JSON.parse(body);
-                    const reply = ((_e = (_d = (_c = (_b = (_a = json.candidates) === null || _a === void 0 ? void 0 : _a[0]) === null || _b === void 0 ? void 0 : _b.content) === null || _c === void 0 ? void 0 : _c.parts) === null || _d === void 0 ? void 0 : _d[0]) === null || _e === void 0 ? void 0 : _e.text) || 'No response.';
-                    resolve(reply);
-                }
-                catch (e) {
-                    reject(new Error('Invalid response from Gemini API.'));
-                }
-            });
-        });
-        req.on('error', reject);
-        req.write(data);
-        req.end();
+        },
+        body: JSON.stringify({
+            contents: [{ parts: [{ text: prompt }] }]
+        })
     });
+    if (!response.ok) {
+        throw new Error(`Gemini API Error: ${response.status} ${response.statusText}`);
+    }
+    const json = await response.json();
+    return (json.candidates && json.candidates[0] && json.candidates[0].content && json.candidates[0].content.parts && json.candidates[0].content.parts[0] && json.candidates[0].content.parts[0].text) || 'No response.';
 }
 function deactivate() { }
