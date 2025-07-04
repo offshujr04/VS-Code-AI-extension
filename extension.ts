@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 class GeminiSidebarProvider implements vscode.WebviewViewProvider {
+  // Register id aiSidebar
   static readonly viewType = 'aiSidebarView';
   private apiKey: string | undefined;
   constructor(private context: vscode.ExtensionContext) {
@@ -42,6 +43,7 @@ export function activate(context: vscode.ExtensionContext) {
   console.log('AI Extension Activated!');
   context.subscriptions.push(
     vscode.window.registerWebviewViewProvider(
+      // Calls the string viewtype referring to aisidebar & allows user to see and interact with it
       GeminiSidebarProvider.viewType,
       new GeminiSidebarProvider(context)
     )
@@ -89,7 +91,20 @@ function getWebviewContent(): string {
         }
         #inputBox { flex: 1; padding: 8px; font-size: 1em; }
         #sendBtn { padding: 8px 16px; margin-left: 8px; }
+        pre.bot {
+          background: #f0f0f0;
+          padding: 8px;
+          border-radius: 4px;
+          white-space: pre-wrap;
+          font-family: monospace;
+        }
+        div.bot code {
+          background: #eee;
+          padding: 2px 4px;
+          border-radius: 3px;
+        }
       </style>
+      <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>       
     </head>
     <body>
       <div id="chat"></div>
@@ -119,11 +134,18 @@ function getWebviewContent(): string {
         }
 
         function appendMessage(text, sender) {
-          const p = document.createElement('p');
-          p.textContent = (sender === 'user' ? 'You: ' : 'Gemini: ') + text;
-          p.className = sender;
-          chat.appendChild(p);
-          // To go to the bottom of the chat
+          if (sender === 'bot') {
+            const div = document.createElement('div');
+            div.className = 'bot';
+            // Marked here refers to the marked library
+            div.innerHTML = marked.parse(text);
+            chat.appendChild(div);
+          } else {
+            const p = document.createElement('p');
+            p.textContent = 'You: ' + text;
+            p.className = 'user';
+            chat.appendChild(p);
+          }
           chat.scrollTop = chat.scrollHeight;
         }
 

@@ -72,10 +72,13 @@ class GeminiSidebarProvider {
         });
     }
 }
+// Register id aiSidebar
 GeminiSidebarProvider.viewType = 'aiSidebarView';
 function activate(context) {
     console.log('AI Extension Activated!');
-    context.subscriptions.push(vscode.window.registerWebviewViewProvider(GeminiSidebarProvider.viewType, new GeminiSidebarProvider(context)));
+    context.subscriptions.push(vscode.window.registerWebviewViewProvider(
+    // Calls the string viewtype referring to aisidebar & allows user to see and interact with it
+    GeminiSidebarProvider.viewType, new GeminiSidebarProvider(context)));
     // Register the command to reveal the sidebar view
     context.subscriptions.push(vscode.commands.registerCommand('aiExtension.openSidebar', () => {
         vscode.commands.executeCommand('workbench.view.extension.aiSidebar');
@@ -114,7 +117,20 @@ function getWebviewContent() {
         }
         #inputBox { flex: 1; padding: 8px; font-size: 1em; }
         #sendBtn { padding: 8px 16px; margin-left: 8px; }
+        pre.bot {
+          background: #f0f0f0;
+          padding: 8px;
+          border-radius: 4px;
+          white-space: pre-wrap;
+          font-family: monospace;
+        }
+        div.bot code {
+          background: #eee;
+          padding: 2px 4px;
+          border-radius: 3px;
+        }
       </style>
+      <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>       
     </head>
     <body>
       <div id="chat"></div>
@@ -137,16 +153,25 @@ function getWebviewContent() {
           const msg = inputBox.value.trim();
           if (msg) {
             appendMessage(msg, 'user');
+            // Send message to the backend especially to this function onDidReceiveMessage
             vscode.postMessage({ type: 'userMessage', text: msg });
             inputBox.value = '';
           }
         }
 
         function appendMessage(text, sender) {
-          const p = document.createElement('p');
-          p.textContent = (sender === 'user' ? 'You: ' : 'Gemini: ') + text;
-          p.className = sender;
-          chat.appendChild(p);
+          if (sender === 'bot') {
+            const div = document.createElement('div');
+            div.className = 'bot';
+            // Marked here refers to the marked library
+            div.innerHTML = marked.parse(text);
+            chat.appendChild(div);
+          } else {
+            const p = document.createElement('p');
+            p.textContent = 'You: ' + text;
+            p.className = 'user';
+            chat.appendChild(p);
+          }
           chat.scrollTop = chat.scrollHeight;
         }
 
