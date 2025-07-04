@@ -36,7 +36,6 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
-// AIzaSyDJyAUgbBfPVzGnKgrNB0Llqm7IFn4q-x8
 class GeminiSidebarProvider {
     constructor(context) {
         this.context = context;
@@ -80,8 +79,6 @@ function activate(context) {
     // Register the command to reveal the sidebar view
     context.subscriptions.push(vscode.commands.registerCommand('aiExtension.openSidebar', () => {
         vscode.commands.executeCommand('workbench.view.extension.aiSidebar');
-        // Optionally, also reveal the view itself:
-        // vscode.commands.executeCommand('vscode.open', { viewId: GeminiSidebarProvider.viewType });
     }));
 }
 function getWebviewContent() {
@@ -92,12 +89,29 @@ function getWebviewContent() {
       <meta charset="UTF-8">
       <title>Gemini Chat</title>
       <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; }
-        #chat { height: 80vh; overflow-y: auto; padding: 10px; background: #f5f5f5; }
-        #chat p { margin: 5px 0; padding: 8px; border-radius: 4px; }
+        body { 
+          font-family: sans-serif; 
+          margin: 0; 
+          padding: 0; }
+        #chat { 
+          height: 80vh; 
+          overflow-y: auto; 
+          padding: 10px; 
+          background:hsl(0, 0.00%, 96.10%); 
+          border-bottom: 1px solid #ccc;
+        }
+        #chat p { 
+          margin: 5px 0; 
+          padding: 8px; 
+          border-radius: 4px; 
+        }
         #chat .user { background:rgb(7, 52, 89); }
         #chat .bot { background: rgb(7, 52, 89); }
-        #inputArea { display: flex; padding: 10px; border-top: 1px solid #ccc; }
+        #inputArea { 
+          display: flex; 
+          padding: 10px; 
+          border-top: 1px solid #ccc; 
+        }
         #inputBox { flex: 1; padding: 8px; font-size: 1em; }
         #sendBtn { padding: 8px 16px; margin-left: 8px; }
       </style>
@@ -105,7 +119,7 @@ function getWebviewContent() {
     <body>
       <div id="chat"></div>
       <div id="inputArea">
-        <input id="inputBox" type="text" placeholder="Type a message..." />
+        <input id="inputBox" type="text" placeholder="Enter your query" />
         <button id="sendBtn">Send</button>
       </div>
       <script>

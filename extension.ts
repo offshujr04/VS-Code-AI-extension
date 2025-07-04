@@ -64,12 +64,29 @@ function getWebviewContent(): string {
       <meta charset="UTF-8">
       <title>Gemini Chat</title>
       <style>
-        body { font-family: sans-serif; margin: 0; padding: 0; }
-        #chat { height: 80vh; overflow-y: auto; padding: 10px; background: #f5f5f5; }
-        #chat p { margin: 5px 0; padding: 8px; border-radius: 4px; }
+        body { 
+          font-family: sans-serif; 
+          margin: 0; 
+          padding: 0; }
+        #chat { 
+          height: 80vh; 
+          overflow-y: auto; 
+          padding: 10px; 
+          background:hsl(0, 0.00%, 96.10%); 
+          border-bottom: 1px solid #ccc;
+        }
+        #chat p { 
+          margin: 5px 0; 
+          padding: 8px; 
+          border-radius: 4px; 
+        }
         #chat .user { background:rgb(7, 52, 89); }
         #chat .bot { background: rgb(7, 52, 89); }
-        #inputArea { display: flex; padding: 10px; border-top: 1px solid #ccc; }
+        #inputArea { 
+          display: flex; 
+          padding: 10px; 
+          border-top: 1px solid #ccc; 
+        }
         #inputBox { flex: 1; padding: 8px; font-size: 1em; }
         #sendBtn { padding: 8px 16px; margin-left: 8px; }
       </style>
@@ -77,7 +94,7 @@ function getWebviewContent(): string {
     <body>
       <div id="chat"></div>
       <div id="inputArea">
-        <input id="inputBox" type="text" placeholder="Type a message..." />
+        <input id="inputBox" type="text" placeholder="Enter your query" />
         <button id="sendBtn">Send</button>
       </div>
       <script>
@@ -95,6 +112,7 @@ function getWebviewContent(): string {
           const msg = inputBox.value.trim();
           if (msg) {
             appendMessage(msg, 'user');
+            // Send message to the backend especially to this function onDidReceiveMessage
             vscode.postMessage({ type: 'userMessage', text: msg });
             inputBox.value = '';
           }
@@ -105,6 +123,7 @@ function getWebviewContent(): string {
           p.textContent = (sender === 'user' ? 'You: ' : 'Gemini: ') + text;
           p.className = sender;
           chat.appendChild(p);
+          // To go to the bottom of the chat
           chat.scrollTop = chat.scrollHeight;
         }
 
