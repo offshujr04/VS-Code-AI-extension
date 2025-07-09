@@ -113,17 +113,33 @@ function getWebviewContent() {
         #chat .bot { background: rgb(7, 52, 89); }
         #inputArea { 
           display: flex; 
+          flex-wrap: wrap;
           padding: 10px; 
           border-top: 1px solid #ccc; 
         }
-        #inputBox { flex: 1; padding: 8px; font-size: 1em; }
-        #sendBtn { padding: 8px 16px; margin-left: 8px; }
+        #inpwrapper { 
+          position: relative;
+          display: flex; 
+          flex: 1; 
+          align-items: center; 
+        }
+        #modelSelectContainer select {
+          padding: 8px;
+          margin-right: 8px;
+          font-size: 14px;
+        }
+        #inputBox { 
+          flex: 1; 
+          padding: 8px; 
+          font-size: 1em; 
+        }
+        #sendBtn { padding: 8px 16px; margin-left: 8px; flex-shrink: 0;}
 
         // Affects the bot's response styling (<pre>)
         div.bot pre,
         pre code {
           background-color: #1e1e1e;
-          color: #f8f8f2; /* Light text for dark background */
+          color: #f8f8f2;
           padding: 16px;
           border-radius: 6px;
           font-family: 'Courier New', monospace;
@@ -158,7 +174,15 @@ function getWebviewContent() {
     <body>
       <div id="chat"></div>
       <div id="inputArea">
-        <input id="inputBox" type="text" placeholder="Enter your query" />
+        <div id="inpwrapper">
+          <div id="modelSelectContainer">
+            <select id="modelSelect">
+            <option value="gemini">Gemini</option>
+            <option value="grok">Grok</option>
+            </select>
+          </div>
+          <input id="inputBox" type="text" placeholder="Enter your query" />
+        </div>  
         <button id="sendBtn">Send</button>
       </div>
       <script>
