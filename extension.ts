@@ -3,6 +3,7 @@ class GeminiSidebarProvider implements vscode.WebviewViewProvider {
   // Register id aiSidebar
   static readonly viewType = 'aiSidebarView';
   private apiKey: string | undefined;
+  //  creating   a context variable that can store the extension context provided by vs code 
   constructor(private context: vscode.ExtensionContext) {
     console.log('GeminiSidebarProvider initialized');
   }
@@ -91,18 +92,40 @@ function getWebviewContent(): string {
         }
         #inputBox { flex: 1; padding: 8px; font-size: 1em; }
         #sendBtn { padding: 8px 16px; margin-left: 8px; }
-        pre.bot {
-          background: #f0f0f0;
-          padding: 8px;
-          border-radius: 4px;
+
+        // Affects the bot's response styling (<pre>)
+        div.bot pre,
+        pre code {
+          background-color: #1e1e1e;
+          color: #f8f8f2;
+          padding: 16px;
+          border-radius: 6px;
+          font-family: 'Courier New', monospace;
           white-space: pre-wrap;
+          overflow-x: auto;
+        }
+
+        div.bot code,
+        code {
+          background-color: #2d2d2d;
+          color: #f8f8f2;
+          padding: 2px 6px;
+          border-radius: 4px;
           font-family: monospace;
         }
-        div.bot code {
-          background: #eee;
-          padding: 2px 4px;
-          border-radius: 3px;
+        div.bot > pre {
+          background-color: #1e1e1e;
+          color: #f8f8f2;
+          padding: 16px;
+          border-radius: 6px;
+          font-family: 'Courier New', monospace;
+          white-space: pre-wrap;
+          overflow-x: auto;
+          width: fit-content;
+          max-width: 90%;
+          margin: 20px auto;
         }
+
       </style>
       <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>       
     </head>
