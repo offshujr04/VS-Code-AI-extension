@@ -36,11 +36,12 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
-class GeminiSidebarProvider {
+class AISidebarProvider {
     //  creating   a context variable that can store the extension context provided by vs code 
     constructor(context) {
         this.context = context;
-        console.log('GeminiSidebarProvider initialized');
+        this.apiKeys = {};
+        console.log('AISidebarProvider initialized');
     }
     async resolveWebviewView(webviewView) {
         console.log('Resolving Gemini Webview View');
@@ -48,38 +49,101 @@ class GeminiSidebarProvider {
         webviewView.webview.html = getWebviewContent();
         webviewView.webview.onDidReceiveMessage(async (message) => {
             if (message.type === 'userMessage') {
-                if (!this.apiKey) {
-                    // Prompt for API key if not set
-                    this.apiKey = await vscode.window.showInputBox({
-                        prompt: 'Enter your Gemini API Key',
+                const prompt = message.text;
+                const model = message.model;
+                let responseText = '';
+                // Prompt for API key if not set for this model
+                if (!this.apiKeys[model]) {
+                    this.apiKeys[model] = await vscode.window.showInputBox({
+                        prompt: `Enter your ${model} API Key`,
                         ignoreFocusOut: true,
                         password: true
                     });
-                    if (!this.apiKey) {
-                        webviewView.webview.postMessage({ type: 'llmResponse', text: 'Error: Gemini API key is required.' });
-                        vscode.window.showErrorMessage('Gemini API key is required.');
+                    if (!this.apiKeys[model]) {
+                        webviewView.webview.postMessage({ type: 'llmResponse', text: `Error: ${model} API key is required.` });
+                        vscode.window.showErrorMessage(`${model} API key is required.`);
                         return;
                     }
                 }
                 try {
-                    const reply = await fetchGeminiResponse(message.text, this.apiKey);
-                    webviewView.webview.postMessage({ type: 'llmResponse', text: reply });
+                    if (model === 'grok') {
+                        responseText = await callGroq(prompt, this.apiKeys[model]);
+                    }
+                    else if (model === 'gemini') {
+                        responseText = await callGemini(prompt, this.apiKeys[model]);
+                    }
+                    else {
+                        responseText = 'Model not supported.';
+                    }
                 }
                 catch (err) {
-                    webviewView.webview.postMessage({ type: 'llmResponse', text: 'Error: ' + (err?.message || err) });
-                    vscode.window.showErrorMessage('Gemini API Error: ' + (err?.message || err));
+                    responseText = 'Error: ' + (err?.message || err);
                 }
+                webviewView.webview.postMessage({ type: 'llmResponse', text: responseText });
             }
         });
     }
 }
 // Register id aiSidebar
-GeminiSidebarProvider.viewType = 'aiSidebarView';
+AISidebarProvider.viewType = 'aiSidebarView';
+async function callGemini(prompt, apiKey) {
+    const endpoint = `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }),
+        });
+        const data = await response.json();
+        console.log('Gemini API response:', data);
+        if (data.error) {
+            return `Gemini API Error: ${data.error.message || JSON.stringify(data.error)}`;
+        }
+        return data?.candidates?.[0]?.content?.parts?.[0]?.text || 'No response. This is an error.';
+    }
+    catch (err) {
+        console.error('Gemini fetch error:', err);
+        return `Gemini fetch error: ${err?.message || err}`;
+    }
+}
+async function callGroq(prompt, apiKey) {
+    const endpoint = 'https://api.groq.com/openai/v1/chat/completions';
+    try {
+        const response = await fetch(endpoint, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                model: "deepseek-r1-distill-llama-70b",
+                messages: [{ role: 'user', content: prompt }],
+                temperature: 0.7,
+                max_tokens: 1024,
+            }),
+        });
+        const data = await response.json();
+        console.log('Groq API response:', data); // <-- Debug log
+        if (data.error) {
+            return `Groq API Error: ${data.error.message || JSON.stringify(data.error)}`;
+        }
+        if (data?.choices?.[0]?.message?.content) {
+            return data.choices[0].message.content;
+        }
+        else {
+            return 'No response. This is an error.';
+        }
+    }
+    catch (err) {
+        console.error('Groq fetch error:', err);
+        return `Groq fetch error: ${err?.message || err}`;
+    }
+}
 function activate(context) {
     console.log('AI Extension Activated!');
     context.subscriptions.push(vscode.window.registerWebviewViewProvider(
     // Calls the string viewtype referring to aisidebar & allows user to see and interact with it
-    GeminiSidebarProvider.viewType, new GeminiSidebarProvider(context)));
+    AISidebarProvider.viewType, new AISidebarProvider(context)));
     // Register the command to reveal the sidebar view
     context.subscriptions.push(vscode.commands.registerCommand('aiExtension.openSidebar', () => {
         vscode.commands.executeCommand('workbench.view.extension.aiSidebar');
@@ -109,8 +173,8 @@ function getWebviewContent() {
           padding: 8px; 
           border-radius: 4px; 
         }
-        #chat .user { background:rgb(7, 52, 89); }
-        #chat .bot { background: rgb(7, 52, 89); }
+        #chat .user { background:rgb(7, 52, 89); color: #fff; }
+        #chat .bot { background: rgb(7, 52, 89); color: #fff; }
         #inputArea { 
           display: flex; 
           flex-wrap: wrap;
@@ -190,6 +254,7 @@ function getWebviewContent() {
         const chat = document.getElementById('chat');
         const inputBox = document.getElementById('inputBox');
         const sendBtn = document.getElementById('sendBtn');
+        const modelSelect = document.getElementById('modelSelect');
 
         sendBtn.addEventListener('click', sendMessage);
         inputBox.addEventListener('keypress', e => {
@@ -198,10 +263,14 @@ function getWebviewContent() {
 
         function sendMessage() {
           const msg = inputBox.value.trim();
-          if (msg) {
+          const selectedModel = modelSelect.value;
+          if(msg){
             appendMessage(msg, 'user');
-            // Send message to the backend especially to this function onDidReceiveMessage
-            vscode.postMessage({ type: 'userMessage', text: msg });
+            vscode.postMessage({
+              type: 'userMessage',
+              text: msg,
+              model: selectedModel
+            });
             inputBox.value = '';
           }
         }
