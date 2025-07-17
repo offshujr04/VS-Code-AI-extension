@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.activate = activate;
 exports.deactivate = deactivate;
 const vscode = __importStar(require("vscode"));
+const path = __importStar(require("path"));
 class AISidebarProvider {
     constructor(context) {
         this.context = context;
@@ -46,29 +47,52 @@ class AISidebarProvider {
     async resolveWebviewView(webviewView) {
         const updateWebviewFiles = () => {
             const activeEditor = vscode.window.activeTextEditor;
-            const currentFileName = activeEditor ? activeEditor.document.fileName : '';
+            const currentFileName = activeEditor ? path.basename(activeEditor.document.fileName) : '';
             webviewView.webview.postMessage({
                 type: 'updateFiles',
                 currentFile: currentFileName,
-                attachedFiles: this.attachedFiles.map(f => f.name)
+                attachedFiles: this.attachedFiles.map(f => path.basename(f.name))
             });
         };
         // Initial load
         const activeEditor = vscode.window.activeTextEditor;
-        const currentFileName = activeEditor ? activeEditor.document.fileName : '';
+        const currentFileName = activeEditor ? path.basename(activeEditor.document.fileName) : '';
         webviewView.webview.options = { enableScripts: true };
-        webviewView.webview.html = getWebviewContent(currentFileName, this.attachedFiles.map(f => f.name));
+        webviewView.webview.html = getWebviewContent(currentFileName, this.attachedFiles.map(f => path.basename(f.name)));
         webviewView.webview.onDidReceiveMessage(async (message) => {
             // Attach files handling
             if (message.type === 'addFiles') {
-                const files = await vscode.window.showOpenDialog({ canSelectMany: true });
+                const workspaceFolders = vscode.workspace.workspaceFolders;
+                if (!workspaceFolders || workspaceFolders.length === 0) {
+                    vscode.window.showErrorMessage('No workspace folder is open.');
+                    return;
+                }
+                const rootUri = workspaceFolders[0].uri;
+                const files = await vscode.window.showOpenDialog({
+                    canSelectMany: true,
+                    defaultUri: rootUri,
+                    openLabel: 'Attach',
+                    title: 'Select a file to attach',
+                });
                 if (files) {
                     for (const file of files) {
-                        const doc = await vscode.workspace.openTextDocument(file);
-                        this.attachedFiles.push({ name: file.fsPath, content: doc.getText() });
+                        if (file.fsPath.startsWith(rootUri.fsPath)) {
+                            const doc = await vscode.workspace.openTextDocument(file);
+                            this.attachedFiles.push({ name: file.fsPath, content: doc.getText() });
+                        }
+                        else {
+                            vscode.window.showErrorMessage(`File ${file.fsPath} is outside the workspace folder.`);
+                            continue;
+                        }
                     }
                     updateWebviewFiles();
                 }
+            }
+            // Remove attached file
+            if (message.type === 'removeAttachedFile') {
+                const fileName = message.fileName;
+                this.attachedFiles = this.attachedFiles.filter(f => path.basename(f.name) !== fileName);
+                updateWebviewFiles();
             }
             // User message handling
             if (message.type === 'userMessage') {
@@ -80,12 +104,12 @@ class AISidebarProvider {
                 const activeEditor = vscode.window.activeTextEditor;
                 if (activeEditor) {
                     const currentfile = activeEditor.document;
-                    filecontext = `\n\n---\nCurrent file: ${currentfile.fileName}\n${currentfile.getText()}\n---\n`;
+                    filecontext = `\n\n---\nCurrent file: ${path.basename(currentfile.fileName)}\n${currentfile.getText()}\n---\n`;
                 }
                 // Add attached files context
                 let attachedFilesContext = '';
                 if (this.attachedFiles.length > 0) {
-                    attachedFilesContext = this.attachedFiles.map(f => `\n\n---\nAttached file: ${f.name}\n${f.content}\n---\n`).join('');
+                    attachedFilesContext = this.attachedFiles.map(f => `\n\n---\nAttached file: ${path.basename(f.name)}\n${f.content}\n---\n`).join('');
                 }
                 // Combine prompt and all context
                 const fullPrompt = prompt + filecontext + attachedFilesContext;
@@ -209,8 +233,18 @@ function getWebviewContent(currentFileName = '', attachedFiles = []) {
         #sendBtn { padding: 8px 16px; margin-left: 8px; flex-shrink: 0;}
         #contextbar{ display:flex; background:  #101010ff; padding: 10px 16px; border-bottom: 1px solid #ccc; align-items: center; gap: 16px; }
         #attachedFiles{ margin: 0 0 0 10px; padding: 0; display: inline; }
-        #attachedFiles li { list-style: none; display: inline; margin-right: 10px; padding: 2px 6px; font-size: 0.95em; color: #333; }
-        #attachedFiles li:hover { background: #d1d5db; cursor: pointer; }
+        #attachedFiles li { list-style: none; display: inline; margin-right: 10px; padding: 2px 6px; font-size: 0.95em; color: #e5e7eb; background: #23272e; border-radius: 4px; }
+        #attachedFiles li:hover { background: #484a4c; cursor: pointer; }
+        #attachedFiles li .remove-file {
+          color: #ff6b6b;
+          margin-left: 6px;
+          cursor: pointer;
+          font-weight: bold;
+          font-size: 1.1em;
+        }
+        #attachedFiles li .remove-file:hover {
+          color: #ff2222;
+        }
         #addfiles_btn{ margin-left: auto; padding: 6px 14px; font-size: 0.95em; cursor: pointer; }
       </style>
       <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>       
@@ -220,7 +254,7 @@ function getWebviewContent(currentFileName = '', attachedFiles = []) {
         <span><b>Current File:</b> <span id="currentFile">${currentFileName || 'None'}</span></span>
         <span><b>Attached Files:</b>
           <ul id="attachedFiles">
-            ${attachedFiles.map(file => `<li>${file}</li>`).join('')}
+            ${attachedFiles.map(file => `<li>${file}<span class="remove-file" data-file="${file}">&times;</span></li>`).join('')}
           </ul>
         </span>
         <button id="addfiles_btn">Attach Files</button>
@@ -283,6 +317,13 @@ function getWebviewContent(currentFileName = '', attachedFiles = []) {
           vscode.postMessage({ type: 'addFiles' });
         });
 
+        document.getElementById('attachedFiles').addEventListener('click', function(e) {
+          if (e.target.classList.contains('remove-file')) {
+            const fileName = e.target.getAttribute('data-file');
+            vscode.postMessage({ type: 'removeAttachedFile', fileName });
+          }
+        });
+
         window.addEventListener('message', event => {
           const message = event.data;
           if (message.type === 'llmResponse') {
@@ -291,7 +332,7 @@ function getWebviewContent(currentFileName = '', attachedFiles = []) {
           if (message.type === 'updateFiles') {
             document.getElementById('currentFile').textContent = message.currentFile || 'None';
             document.getElementById('attachedFiles').innerHTML =
-              (message.attachedFiles || []).map(f => \`<li>\${f}</li>\`).join('');
+              (message.attachedFiles || []).map(f => \`<li>\${f}<span class="remove-file" data-file="\${f}">&times;</span></li>\`).join('');
           }
         });
       </script>
